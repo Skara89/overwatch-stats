@@ -17,6 +17,8 @@
   select:focus{outline:1px solid var(--accent)}
   button.reset{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-left:auto}
   button.reset:hover{color:var(--text)}
+  .toggle{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;user-select:none}
+  .toggle input{cursor:pointer}
   main{max-width:1200px;margin:0 auto;padding:32px 24px}
   h1{font-size:34px;letter-spacing:1px;margin:14px 0 8px;text-transform:uppercase}
   .accent-bar{width:60px;height:5px;background:var(--accent);border-radius:2px}
@@ -67,6 +69,7 @@
     <option value="support">Support</option>
   </select>
   <select id="f-map"><option value="">Alle Maps</option></select>
+  <label class="toggle"><input type="checkbox" id="f-purewr">Nur Win-Rate (keine Pick-Rate-Gewichtung)</label>
   <button class="reset" id="reset">↺ Zurücksetzen</button>
 </header>
 
@@ -114,21 +117,75 @@ const els = {
   rank: document.getElementById('f-rank'),
   role: document.getElementById('f-role'),
   map: document.getElementById('f-map'),
+  purewr: document.getElementById('f-purewr'),
   tiers: document.getElementById('tiers'),
   meta: document.getElementById('meta'),
   reset: document.getElementById('reset'),
 };
 
 let heroesByKey = null;
+let lastStats = null;
 
-async function loadMaps() {
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Run `worker` over `items` with at most `concurrency` in flight at once,
+// so we don't hammer the API and trip its rate limit.
+async function pMapLimit(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function lane() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await worker(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, lane));
+  return results;
+}
+
+async function probeMapValid(key, gamemode, attempt = 0) {
+  const res = await fetch(`https://overfast-api.tekrop.fr/heroes/stats?platform=pc&gamemode=${gamemode}&region=europe&map=${key}`);
+  if (res.status === 429 && attempt < 4) {
+    await sleep(400 * (attempt + 1));
+    return probeMapValid(key, gamemode, attempt + 1);
+  }
+  try {
+    const json = await res.json();
+    return Array.isArray(json);
+  } catch { return false; }
+}
+
+// Not every map returns hero stats (workshop-only maps, retired 2CP maps,
+// maps not yet in the ranked/quickplay role-queue rotation, ...). Probe each
+// map key once per gamemode and cache the result, instead of hardcoding a
+// list that would go stale as Blizzard adds/removes maps from rotation.
+async function getValidMapKeys(gamemode) {
+  const cacheKey = 'ow:mapvalidity:' + gamemode;
+  const hit = cacheGet(cacheKey, CACHE_TTL_META);
+  if (hit) return hit;
   const maps = await cachedFetch('https://overfast-api.tekrop.fr/maps', CACHE_TTL_META);
+  const flags = await pMapLimit(maps, 4, m => probeMapValid(m.key, gamemode));
+  const valid = maps.filter((m, i) => flags[i]).map(m => m.key);
+  cacheSet(cacheKey, valid);
+  return valid;
+}
+
+async function loadMaps(gamemode) {
+  const [maps, validKeys] = await Promise.all([
+    cachedFetch('https://overfast-api.tekrop.fr/maps', CACHE_TTL_META),
+    getValidMapKeys(gamemode),
+  ]);
+  const validSet = new Set(validKeys);
+  const previous = els.map.value;
+  els.map.innerHTML = '<option value="">Alle Maps</option>';
   for (const m of maps) {
+    if (!validSet.has(m.key)) continue;
     const opt = document.createElement('option');
     opt.value = m.key;
     opt.textContent = m.name;
     els.map.appendChild(opt);
   }
+  els.map.value = [...els.map.options].some(o => o.value === previous) ? previous : '';
 }
 
 async function loadHeroes() {
@@ -150,7 +207,9 @@ function buildStatsUrl() {
 }
 
 // Score: winrate, discounted for low-sample (low pickrate) heroes.
+// With the "pure win-rate" toggle on, skip the discount entirely.
 function computeScore(winrate, pickrate) {
+  if (els.purewr.checked) return winrate;
   const confidence = Math.min(pickrate / 15, 1);
   return winrate * (0.55 + 0.45 * confidence);
 }
@@ -214,8 +273,8 @@ async function refresh() {
   els.meta.textContent = 'lädt…';
   try {
     if (!heroesByKey) await loadHeroes();
-    const stats = await cachedFetch(buildStatsUrl(), CACHE_TTL_STATS);
-    render(stats);
+    lastStats = await cachedFetch(buildStatsUrl(), CACHE_TTL_STATS);
+    render(lastStats);
     els.meta.textContent = 'Stand: ' + new Date().toLocaleString('de-DE') + ' · Quelle: OverFast API (Blizzard-Live-Daten, stündlich zwischengespeichert)';
   } catch (e) {
     els.tiers.innerHTML = `<div class="status">Fehler beim Laden: ${e.message}</div>`;
@@ -223,21 +282,33 @@ async function refresh() {
   }
 }
 
-[els.region, els.platform, els.gamemode, els.rank, els.role, els.map].forEach(el =>
+[els.region, els.platform, els.rank, els.role, els.map].forEach(el =>
   el.addEventListener('change', refresh)
 );
-els.reset.addEventListener('click', () => {
+els.gamemode.addEventListener('change', async () => {
+  await loadMaps(els.gamemode.value);
+  refresh();
+});
+els.purewr.addEventListener('change', () => {
+  try { localStorage.setItem('ow:purewr', els.purewr.checked ? '1' : '0'); } catch {}
+  if (lastStats) render(lastStats);
+});
+els.reset.addEventListener('click', async () => {
   els.region.value = 'europe';
   els.platform.value = 'pc';
   els.gamemode.value = 'competitive';
   els.rank.value = '';
   els.role.value = '';
+  els.purewr.checked = false;
+  try { localStorage.setItem('ow:purewr', '0'); } catch {}
+  await loadMaps(els.gamemode.value);
   els.map.value = '';
   refresh();
 });
 
 (async () => {
-  await loadMaps();
+  try { els.purewr.checked = localStorage.getItem('ow:purewr') === '1'; } catch {}
+  await loadMaps(els.gamemode.value);
   await refresh();
 })();
 </script>
