@@ -1,52 +1,9 @@
-# Overwatch Tier List — Nutzung auf einem anderen PC
+# Overwatch Tier List
 
-Das Tool ist eine einzelne Datei (`index.html`) ohne Installation, ohne Build-Schritt und ohne Zugangsdaten. Es lädt die Heldenstatistiken live über das Internet von der [OverFast API](https://overfast-api.tekrop.fr) — auf dem anderen PC wird also **eine Internetverbindung**, aber **kein GitHub-Zugang** benötigt.
+**Live:** https://skara89.github.io/overwatch-stats/
 
-## Option A: Über GitHub
+Personal tool for browsing Overwatch hero win/pick rates, pulled live from the [OverFast API](https://overfast-api.tekrop.fr). Auto-deploys via GitHub Pages on every push to `master`.
 
-Das Repo liegt (privat) unter [github.com/Skara89/overwatch-stats](https://github.com/Skara89/overwatch-stats). Auf dem anderen PC, mit installiertem [Git](https://git-scm.com/downloads) und einmaligem Login (`gh auth login` oder Git-Anmeldedaten):
+## Trend filter
 
-```
-git clone https://github.com/Skara89/overwatch-stats.git
-```
-
-Spätere Änderungen holst du dir mit `git pull` im geklonten Ordner. Dann direkt zu „Tool öffnen“ unten springen.
-
-## Option B: Datei manuell kopieren
-
-### 1. Datei übertragen
-
-Kopiere die Datei `index.html` (aus diesem Ordner `overwatch-stats`) auf den anderen PC. Beliebiger Weg:
-
-- **USB-Stick**: Datei drauf kopieren, am Zielrechner wieder herunterkopieren
-- **Cloud-Speicher** (OneDrive, Google Drive, Dropbox): Datei hochladen, am Zielrechner herunterladen
-- **E-Mail an dich selbst**: Datei als Anhang senden
-- **Netzwerkfreigabe**: falls beide PCs im selben Netzwerk sind, direkt per Windows-Dateifreigabe kopieren
-
-Der Ordnername ist egal — es reicht die eine `.html`-Datei.
-
-## Tool öffnen (beide Optionen)
-
-**Einfachster Weg:** Doppelklick auf `index.html` — sie öffnet sich im Standardbrowser und lädt die Daten direkt.
-
-**Falls das nicht funktioniert** (manche Browser blockieren Live-Datenabfragen von lokal geöffneten Dateien, erkennbar an einer leeren Seite oder einer Fehlermeldung „Fehler beim Laden“):
-
-1. Python installieren, falls nicht vorhanden: [python.org/downloads](https://www.python.org/downloads/) (bei der Installation „Add python.exe to PATH“ anhaken)
-2. Eingabeaufforderung/PowerShell im Ordner mit `index.html` öffnen
-3. Folgenden Befehl ausführen:
-   ```
-   python -m http.server 8420
-   ```
-4. Im Browser öffnen: `http://localhost:8420`
-
-## Hinweise
-
-- Es werden keine Zugangsdaten oder Accounts benötigt — die API ist öffentlich.
-- Filter-Einstellungen werden pro Browser 1 Stunde lokal zwischengespeichert (`localStorage`), für schnelleres Umschalten. Das ist rein lokal auf dem jeweiligen PC und muss nicht synchronisiert werden.
-- Änderungen am Tool selbst (Code) müssen erneut kopiert werden — es gibt keine automatische Aktualisierung zwischen den PCs.
-
-## Trend-Funktion (Zeitraum-Filter)
-
-Ein `Trend`-Dropdown zeigt die Veränderung gegenüber einem älteren Snapshot (1/7/30/90 Tage). Dafür zieht ein täglicher GitHub-Actions-Workflow (`.github/workflows/snapshot.yml`) automatisch Snapshots der Basis-Daten (alle Ränge/Rollen/Maps, 12 Region×Plattform×Modus-Kombinationen) und committet sie nach `snapshots/`. Der Browser liest diese Snapshots direkt von GitHub — **dafür muss das Repo öffentlich sein** (`Settings → Danger Zone → Change visibility → Make public`), sonst bekommt der Browser einen 404 und die Trend-Anzeige bleibt leer (alles andere im Tool funktioniert trotzdem normal).
-
-Der Trend-Filter ist nur bei „Alle Ränge/Alle Rollen/Alle Maps" aktiv, weil nur dafür Snapshots existieren. Er zeigt keine exakte Win-Rate „nur der letzten N Tage" (das lässt sich aus Blizzards kumulierten Werten nicht sauber herleiten), sondern die Differenz zum nächstgelegenen verfügbaren Snapshot.
+The `Trend` dropdown (1/7/30/90 days) compares current stats to a daily snapshot, collected automatically by `.github/workflows/snapshot.yml` into `snapshots/`. Only available with no rank/role/map filter, since that's the only scope we snapshot. It shows the *change* since a past snapshot, not an exact "last N days" win rate — Blizzard only exposes cumulative-since-patch numbers, so a true rolling window isn't derivable.
