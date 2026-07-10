@@ -3,99 +3,171 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Overwatch Tier List</title>
+<title>Overwatch Hero Stats</title>
 <style>
   :root{
-    --bg:#0c0e14; --panel:#151822; --panel2:#1b1f2b; --border:#262b3a;
-    --text:#e8eaf0; --muted:#8a90a3; --accent:#ff8a1e;
-    --s:#ff4d4d; --a:#ffb020; --b:#f4e04d; --c:#6bd07a; --d:#5aa8f0; --f:#8a90a3;
+    --page:#0d0d0d;
+    --surface:#1a1a19;
+    --surface-2:#202020;
+    --ink:#ffffff;
+    --ink-2:#c3c2b7;
+    --muted:#898781;
+    --grid:#2c2c2a;
+    --border:rgba(255,255,255,0.10);
+
+    /* ordinal ramp (one hue, light->dark = top->bottom tier) */
+    --tier-s:#86b6ef; --tier-s-ink:#0b0b0b;
+    --tier-a:#5598e7; --tier-a-ink:#0b0b0b;
+    --tier-b:#2a78d6; --tier-b-ink:#ffffff;
+    --tier-c:#1c5cab; --tier-c-ink:#ffffff;
+    --tier-d:#184f95; --tier-d-ink:#ffffff;
+
+    /* categorical, fixed order, distinct from the tier ramp's blue */
+    --role-tank:#9085e9;
+    --role-damage:#e66767;
+    --role-support:#199e70;
+
+    /* diverging pair for the winrate bar (baseline = 50%) */
+    --div-pos:#3987e5;
+    --div-neg:#e66767;
+
+    /* status (reserved, never a series color) */
+    --good:#0ca30c;
+    --critical:#d03b3b;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-  header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;position:sticky;top:0;background:var(--bg);z-index:5}
-  select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-weight:600;cursor:pointer}
-  select:focus{outline:1px solid var(--accent)}
-  select:disabled{opacity:.4;cursor:not-allowed}
-  button.reset{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-left:auto}
-  button.reset:hover{color:var(--text)}
-  .toggle{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;user-select:none}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+
+  .toolbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;position:sticky;top:0;z-index:5}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  select{background:var(--page);color:var(--ink);border:1px solid var(--border);border-radius:5px;padding:6px 8px;font-size:13px;font-family:inherit}
+  select:focus{outline:1px solid var(--div-pos)}
+  select:disabled{opacity:.35;cursor:not-allowed}
+  .toggle{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2);cursor:pointer;user-select:none;padding-bottom:6px}
   .toggle input{cursor:pointer}
-  main{max-width:1200px;margin:0 auto;padding:32px 24px}
-  h1{font-size:34px;letter-spacing:1px;margin:14px 0 8px;text-transform:uppercase}
-  .accent-bar{width:60px;height:5px;background:var(--accent);border-radius:2px}
-  p.lede{color:#c3c7d4;max-width:800px;line-height:1.5;font-size:15px}
-  p.meta{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-top:18px}
-  .tier{display:flex;border:1px solid var(--border);border-radius:10px;margin-top:16px;overflow:hidden;background:var(--panel)}
-  .tier-label{width:56px;flex:none;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;color:#111}
-  .tier-cards{flex:1;display:flex;flex-wrap:wrap;gap:10px;padding:12px}
-  .card{display:flex;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-width:230px}
-  .card img{width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid var(--border)}
-  .card .name{font-weight:700;font-size:14px}
-  .card .stats{color:var(--muted);font-size:12px;margin-top:2px}
-  .card .trend{font-size:11px;margin-top:3px}
-  .trend-up{color:var(--c)}
-  .trend-down{color:var(--s)}
+  button.reset{background:none;border:1px solid var(--border);color:var(--ink-2);font-size:12px;border-radius:5px;padding:6px 10px;cursor:pointer;margin-left:auto;align-self:flex-end}
+  button.reset:hover{color:var(--ink);border-color:var(--ink-2)}
+
+  main{max-width:920px;margin:0 auto;padding:28px 24px 60px}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--div-pos)}
+  h1{font-size:22px;font-weight:600;margin:6px 0 12px}
+  p.lede{color:var(--ink-2);max-width:720px;line-height:1.55;font-size:13.5px}
+  p.lede em{color:var(--ink)}
+  p.meta{color:var(--muted);font-size:11.5px;margin-top:14px;padding-bottom:16px;border-bottom:1px solid var(--grid)}
+  a.src{color:var(--div-pos);text-decoration:none}
+  a.src:hover{text-decoration:underline}
+
+  .tier-section{margin-top:22px}
+  .tier-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .tier-chip{font-size:11px;font-weight:800;letter-spacing:.04em;border-radius:4px;padding:2px 8px}
+  .tier-count{font-size:11px;color:var(--muted)}
+  .tier-rule{flex:1;height:1px;background:var(--grid)}
+
+  .row{display:flex;align-items:center;gap:12px;padding:7px 4px;border-bottom:1px solid var(--grid)}
+  .row:last-child{border-bottom:none}
+  .row img{width:26px;height:26px;border-radius:50%;object-fit:cover;flex:none;background:var(--surface-2)}
+  .row-name{width:118px;flex:none;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .role-dot{display:inline-block;width:6px;height:6px;border-radius:50%;flex:none}
+
+  .wrbar{display:flex;align-items:center;width:92px;height:8px;flex:none}
+  .wrbar-half{flex:1;height:100%;display:flex}
+  .wrbar-half.left{justify-content:flex-end}
+  .wrbar-half.right{justify-content:flex-start}
+  .wrbar-fill{height:100%;border-radius:2px}
+  .wrbar-fill.pos{background:var(--div-pos)}
+  .wrbar-fill.neg{background:var(--div-neg)}
+  .wrbar-mid{width:2px;height:100%;background:var(--grid);flex:none}
+
+  .row-stats{width:150px;flex:none;font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+  .row-trend{font-size:11.5px;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:4px}
+  .trend-good{color:var(--good)}
+  .trend-bad{color:var(--critical)}
   .trend-flat{color:var(--muted)}
-  .role-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
-  .empty{color:var(--muted);padding:20px;font-size:13px}
-  .status{color:var(--muted);font-size:13px;padding:20px 0}
-  a.src{color:var(--accent);text-decoration:none}
+
+  .empty{color:var(--muted);padding:20px 4px;font-size:13px}
+  .status{color:var(--muted);font-size:13px;padding:20px 4px}
+
+  @media (max-width:640px){
+    .row-name{width:88px}
+    .row-stats{width:120px}
+  }
 </style>
 </head>
 <body>
-<header>
-  <select id="f-region">
-    <option value="europe">Region: Europa</option>
-    <option value="americas">Region: Amerika</option>
-    <option value="asia">Region: Asien</option>
-  </select>
-  <select id="f-platform">
-    <option value="pc">Plattform: PC</option>
-    <option value="console">Plattform: Konsole</option>
-  </select>
-  <select id="f-gamemode">
-    <option value="competitive">Modus: Competitive</option>
-    <option value="quickplay">Modus: Schnellspiel</option>
-  </select>
-  <select id="f-rank">
-    <option value="">Alle Ränge</option>
-    <option value="bronze">Bronze</option>
-    <option value="silver">Silber</option>
-    <option value="gold">Gold</option>
-    <option value="platinum">Platin</option>
-    <option value="diamond">Diamant</option>
-    <option value="master">Meister</option>
-    <option value="grandmaster">Großmeister+</option>
-  </select>
-  <select id="f-role">
-    <option value="">Alle Rollen</option>
-    <option value="tank">Tank</option>
-    <option value="damage">Schaden</option>
-    <option value="support">Support</option>
-  </select>
-  <select id="f-map"><option value="">Alle Maps</option></select>
-  <select id="f-trend" title='Nur bei "Alle Ränge/Rollen/Maps" verfügbar'>
-    <option value="">Kein Trend</option>
-    <option value="1">Trend: 1 Tag</option>
-    <option value="7">Trend: 7 Tage</option>
-    <option value="30">Trend: 30 Tage</option>
-    <option value="90">Trend: 90 Tage</option>
-  </select>
-  <label class="toggle"><input type="checkbox" id="f-purewr">Nur Win-Rate (keine Pick-Rate-Gewichtung)</label>
-  <button class="reset" id="reset">↺ Zurücksetzen</button>
-</header>
+<div class="toolbar">
+  <div class="field"><label for="f-region">Region</label>
+    <select id="f-region">
+      <option value="europe">Europa</option>
+      <option value="americas">Amerika</option>
+      <option value="asia">Asien</option>
+    </select>
+  </div>
+  <div class="field"><label for="f-platform">Plattform</label>
+    <select id="f-platform">
+      <option value="pc">PC</option>
+      <option value="console">Konsole</option>
+    </select>
+  </div>
+  <div class="field"><label for="f-gamemode">Modus</label>
+    <select id="f-gamemode">
+      <option value="competitive">Competitive</option>
+      <option value="quickplay">Schnellspiel</option>
+    </select>
+  </div>
+  <div class="field"><label for="f-rank">Rang</label>
+    <select id="f-rank">
+      <option value="">Alle</option>
+      <option value="bronze">Bronze</option>
+      <option value="silver">Silber</option>
+      <option value="gold">Gold</option>
+      <option value="platinum">Platin</option>
+      <option value="diamond">Diamant</option>
+      <option value="master">Meister</option>
+      <option value="grandmaster">Großmeister+</option>
+    </select>
+  </div>
+  <div class="field"><label for="f-role">Rolle</label>
+    <select id="f-role">
+      <option value="">Alle</option>
+      <option value="tank">Tank</option>
+      <option value="damage">Schaden</option>
+      <option value="support">Support</option>
+    </select>
+  </div>
+  <div class="field"><label for="f-map">Map</label>
+    <select id="f-map"><option value="">Alle</option></select>
+  </div>
+  <div class="field"><label for="f-trend">Trend</label>
+    <select id="f-trend" title='Nur bei "Alle Ränge/Rollen/Maps" verfügbar'>
+      <option value="">Aus</option>
+      <option value="1">1 Tag</option>
+      <option value="7">7 Tage</option>
+      <option value="30">30 Tage</option>
+      <option value="90">90 Tage</option>
+    </select>
+  </div>
+  <label class="toggle"><input type="checkbox" id="f-purewr">Nur Win-Rate</label>
+  <button class="reset" id="reset">Zurücksetzen</button>
+</div>
 
 <main>
-  <div class="accent-bar"></div>
-  <h1>Overwatch Tier List</h1>
-  <p class="lede">Persönliches Tool, das Heldenstatistiken live von der <a class="src" href="https://overfast-api.tekrop.fr" target="_blank">OverFast API</a> lädt (inoffizielle, auf Blizzards eigenen Daten basierende API). Einstufung kombiniert Win-Rate und Pick-Rate; Ergebnisse werden im Browser zwischengespeichert und stündlich neu geladen. Blizzard liefert nur den kumulierten Wert seit Patch-Start (keine echten Zeitfenster) — der optionale Trend-Filter zeigt daher die <em>Veränderung</em> gegenüber einem älteren, täglich gespeicherten Snapshot, nicht eine exakte Win-Rate "nur der letzten N Tage". Nur bei ungefilterten Rängen/Rollen/Maps verfügbar.</p>
+  <div class="eyebrow">Persönliches Tool</div>
+  <h1>Overwatch Hero Stats</h1>
+  <p class="lede">Lädt Heldenstatistiken live von der <a class="src" href="https://overfast-api.tekrop.fr" target="_blank">OverFast API</a> (inoffiziell, basiert auf Blizzards eigenen Daten). Die Einstufung kombiniert Win-Rate und Pick-Rate; der Balken zeigt die Abweichung von 50&nbsp;% Win-Rate. Blizzard liefert nur kumulierte Werte seit Patch-Start — der optionale Trend-Filter zeigt daher die <em>Veränderung</em> gegenüber einem älteren, täglich gespeicherten Snapshot, keine exakte Win-Rate "nur der letzten N Tage", und ist nur ohne Rang-/Rollen-/Map-Filter verfügbar.</p>
   <p class="meta" id="meta">lädt…</p>
   <div id="tiers"></div>
 </main>
 
 <script>
-const ROLE_COLOR = { tank:'#5aa8f0', damage:'#ff5d5d', support:'#6bd07a' };
-const TIER_COLOR = { S:'var(--s)', A:'var(--a)', B:'var(--b)', C:'var(--c)', D:'var(--d)', F:'var(--f)' };
+const ROLE_COLOR = { tank:'var(--role-tank)', damage:'var(--role-damage)', support:'var(--role-support)' };
+const TIER_STYLE = {
+  S: { bg:'var(--tier-s)', ink:'var(--tier-s-ink)' },
+  A: { bg:'var(--tier-a)', ink:'var(--tier-a-ink)' },
+  B: { bg:'var(--tier-b)', ink:'var(--tier-b-ink)' },
+  C: { bg:'var(--tier-c)', ink:'var(--tier-c-ink)' },
+  D: { bg:'var(--tier-d)', ink:'var(--tier-d-ink)' },
+};
 const CACHE_TTL_STATS = 60 * 60 * 1000;      // 1h, matches API cache
 const CACHE_TTL_META  = 24 * 60 * 60 * 1000; // 1 day, heroes/maps metadata
 const CACHE_TTL_SNAPSHOT = 6 * 60 * 60 * 1000; // snapshots only land once/day
@@ -193,7 +265,7 @@ async function loadMaps(gamemode) {
   ]);
   const validSet = new Set(validKeys);
   const previous = els.map.value;
-  els.map.innerHTML = '<option value="">Alle Maps</option>';
+  els.map.innerHTML = '<option value="">Alle</option>';
   for (const m of maps) {
     if (!validSet.has(m.key)) continue;
     const opt = document.createElement('option');
@@ -270,16 +342,31 @@ async function getTrendDeltas(windowDays) {
   return { date: nearestDate, actualDays, byHero };
 }
 
-function trendChipHtml(heroKey, currentWinrate, currentPickrate, trend) {
+function trendHtml(heroKey, currentWinrate, currentPickrate, trend) {
   if (!trend) return '';
   const prev = trend.byHero[heroKey];
   if (!prev) return '';
   const dWR = currentWinrate - prev.winrate;
   const dPR = currentPickrate - prev.pickrate;
-  const cls = dWR > 0.05 ? 'trend-up' : dWR < -0.05 ? 'trend-down' : 'trend-flat';
+  const cls = dWR > 0.05 ? 'trend-good' : dWR < -0.05 ? 'trend-bad' : 'trend-flat';
   const arrow = dWR > 0.05 ? '▲' : dWR < -0.05 ? '▼' : '▬';
   const sign = n => (n >= 0 ? '+' : '') + n.toFixed(1);
-  return `<div class="trend ${cls}">${arrow} ${sign(dWR)} Pp WR · ${sign(dPR)} Pp PR (${trend.actualDays}T)</div>`;
+  return `<span class="row-trend ${cls}">${arrow} ${sign(dWR)} WR · ${sign(dPR)} PR</span>`;
+}
+
+// Diverging winrate bar: baseline at 50%, blue right / red left, deviation
+// clamped to +-8pp (covers the realistic hero winrate spread) so the scale
+// stays fixed across every row instead of rescaling per hero.
+function wrBarHtml(winrate) {
+  const dev = winrate - 50;
+  const pct = Math.min(Math.abs(dev) / 8, 1) * 100;
+  const leftFill = dev < 0 ? `<div class="wrbar-fill neg" style="width:${pct}%"></div>` : '';
+  const rightFill = dev > 0 ? `<div class="wrbar-fill pos" style="width:${pct}%"></div>` : '';
+  return `<div class="wrbar">
+    <div class="wrbar-half left">${leftFill}</div>
+    <div class="wrbar-mid"></div>
+    <div class="wrbar-half right">${rightFill}</div>
+  </div>`;
 }
 
 function bucketize(sorted) {
@@ -318,23 +405,29 @@ function render(stats, trend) {
   for (const label of ['S', 'A', 'B', 'C', 'D']) {
     const items = tiers[label];
     if (!items.length) continue;
-    const row = document.createElement('div');
-    row.className = 'tier';
-    row.innerHTML = `<div class="tier-label" style="background:${TIER_COLOR[label]}">${label}</div><div class="tier-cards"></div>`;
-    const cardsEl = row.querySelector('.tier-cards');
+    const style = TIER_STYLE[label];
+    const section = document.createElement('div');
+    section.className = 'tier-section';
+    section.innerHTML = `
+      <div class="tier-head">
+        <span class="tier-chip" style="background:${style.bg};color:${style.ink}">${label}-TIER</span>
+        <span class="tier-count">${items.length}</span>
+        <span class="tier-rule"></span>
+      </div>
+      <div class="tier-rows"></div>`;
+    const rowsEl = section.querySelector('.tier-rows');
     for (const it of items) {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `
         <img src="${it.meta.portrait}" alt="${it.meta.name}" loading="lazy">
-        <div>
-          <div class="name"><span class="role-dot" style="background:${ROLE_COLOR[it.meta.role] || '#888'}"></span>${it.meta.name}</div>
-          <div class="stats">${it.winrate.toFixed(1)}% WR · ${it.pickrate.toFixed(1)}% PR</div>
-          ${trendChipHtml(it.hero, it.winrate, it.pickrate, trend)}
-        </div>`;
-      cardsEl.appendChild(card);
+        <div class="row-name"><span class="role-dot" style="background:${ROLE_COLOR[it.meta.role] || 'var(--muted)'}"></span>${it.meta.name}</div>
+        ${wrBarHtml(it.winrate)}
+        <div class="row-stats">${it.winrate.toFixed(1)}% WR · ${it.pickrate.toFixed(1)}% PR</div>
+        ${trendHtml(it.hero, it.winrate, it.pickrate, trend)}`;
+      rowsEl.appendChild(row);
     }
-    els.tiers.appendChild(row);
+    els.tiers.appendChild(section);
   }
 }
 
