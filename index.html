@@ -206,12 +206,18 @@ function buildStatsUrl() {
   return 'https://overfast-api.tekrop.fr/heroes/stats?' + p.toString();
 }
 
-// Score: winrate, discounted for low-sample (low pickrate) heroes.
-// With the "pure win-rate" toggle on, skip the discount entirely.
+// Score: winrate, mildly shrunk toward a 50% baseline for very low pickrate
+// heroes (IMDB-style weighted rating / Bayesian shrinkage). SHRINK_M controls
+// how many pickrate points of "pull" the baseline has; small on purpose,
+// since Overwatch's playerbase is large enough that even low-pickrate heroes
+// usually have plenty of underlying games. Raise it if low-pickrate heroes
+// still feel overrated, lower it (or use the "pure win-rate" toggle) if the
+// pull still feels too strong.
+const SHRINK_M = 3;
 function computeScore(winrate, pickrate) {
   if (els.purewr.checked) return winrate;
-  const confidence = Math.min(pickrate / 15, 1);
-  return winrate * (0.55 + 0.45 * confidence);
+  const w = pickrate / (pickrate + SHRINK_M);
+  return w * winrate + (1 - w) * 50;
 }
 
 function bucketize(sorted) {
