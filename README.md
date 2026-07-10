@@ -2,7 +2,19 @@
 
 Das Tool ist eine einzelne Datei (`index.html`) ohne Installation, ohne Build-Schritt und ohne Zugangsdaten. Es lädt die Heldenstatistiken live über das Internet von der [OverFast API](https://overfast-api.tekrop.fr) — auf dem anderen PC wird also **eine Internetverbindung**, aber **kein GitHub-Zugang** benötigt.
 
-## 1. Datei übertragen
+## Option A: Über GitHub
+
+Das Repo liegt (privat) unter [github.com/Skara89/overwatch-stats](https://github.com/Skara89/overwatch-stats). Auf dem anderen PC, mit installiertem [Git](https://git-scm.com/downloads) und einmaligem Login (`gh auth login` oder Git-Anmeldedaten):
+
+```
+git clone https://github.com/Skara89/overwatch-stats.git
+```
+
+Spätere Änderungen holst du dir mit `git pull` im geklonten Ordner. Dann direkt zu „Tool öffnen“ unten springen.
+
+## Option B: Datei manuell kopieren
+
+### 1. Datei übertragen
 
 Kopiere die Datei `index.html` (aus diesem Ordner `overwatch-stats`) auf den anderen PC. Beliebiger Weg:
 
@@ -13,7 +25,7 @@ Kopiere die Datei `index.html` (aus diesem Ordner `overwatch-stats`) auf den and
 
 Der Ordnername ist egal — es reicht die eine `.html`-Datei.
 
-## 2. Tool öffnen
+## Tool öffnen (beide Optionen)
 
 **Einfachster Weg:** Doppelklick auf `index.html` — sie öffnet sich im Standardbrowser und lädt die Daten direkt.
 
