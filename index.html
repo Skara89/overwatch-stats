@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overwatch Tier List</title>
+<style>
+  :root{
+    --bg:#0c0e14; --panel:#151822; --panel2:#1b1f2b; --border:#262b3a;
+    --text:#e8eaf0; --muted:#8a90a3; --accent:#ff8a1e;
+    --s:#ff4d4d; --a:#ffb020; --b:#f4e04d; --c:#6bd07a; --d:#5aa8f0; --f:#8a90a3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;position:sticky;top:0;background:var(--bg);z-index:5}
+  select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-weight:600;cursor:pointer}
+  select:focus{outline:1px solid var(--accent)}
+  button.reset{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-left:auto}
+  button.reset:hover{color:var(--text)}
+  main{max-width:1200px;margin:0 auto;padding:32px 24px}
+  h1{font-size:34px;letter-spacing:1px;margin:14px 0 8px;text-transform:uppercase}
+  .accent-bar{width:60px;height:5px;background:var(--accent);border-radius:2px}
+  p.lede{color:#c3c7d4;max-width:800px;line-height:1.5;font-size:15px}
+  p.meta{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-top:18px}
+  .tier{display:flex;border:1px solid var(--border);border-radius:10px;margin-top:16px;overflow:hidden;background:var(--panel)}
+  .tier-label{width:56px;flex:none;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;color:#111}
+  .tier-cards{flex:1;display:flex;flex-wrap:wrap;gap:10px;padding:12px}
+  .card{display:flex;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-width:230px}
+  .card img{width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid var(--border)}
+  .card .name{font-weight:700;font-size:14px}
+  .card .stats{color:var(--muted);font-size:12px;margin-top:2px}
+  .role-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+  .empty{color:var(--muted);padding:20px;font-size:13px}
+  .status{color:var(--muted);font-size:13px;padding:20px 0}
+  a.src{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<header>
+  <select id="f-region">
+    <option value="europe">Region: Europa</option>
+    <option value="americas">Region: Amerika</option>
+    <option value="asia">Region: Asien</option>
+  </select>
+  <select id="f-platform">
+    <option value="pc">Plattform: PC</option>
+    <option value="console">Plattform: Konsole</option>
+  </select>
+  <select id="f-gamemode">
+    <option value="competitive">Modus: Competitive</option>
+    <option value="quickplay">Modus: Schnellspiel</option>
+  </select>
+  <select id="f-rank">
+    <option value="">Alle Ränge</option>
+    <option value="bronze">Bronze</option>
+    <option value="silver">Silber</option>
+    <option value="gold">Gold</option>
+    <option value="platinum">Platin</option>
+    <option value="diamond">Diamant</option>
+    <option value="master">Meister</option>
+    <option value="grandmaster">Großmeister+</option>
+  </select>
+  <select id="f-role">
+    <option value="">Alle Rollen</option>
+    <option value="tank">Tank</option>
+    <option value="damage">Schaden</option>
+    <option value="support">Support</option>
+  </select>
+  <select id="f-map"><option value="">Alle Maps</option></select>
+  <button class="reset" id="reset">↺ Zurücksetzen</button>
+</header>
+
+<main>
+  <div class="accent-bar"></div>
+  <h1>Overwatch Tier List</h1>
+  <p class="lede">Persönliches Tool, das Heldenstatistiken live von der <a class="src" href="https://overfast-api.tekrop.fr" target="_blank">OverFast API</a> lädt (inoffizielle, auf Blizzards eigenen Daten basierende API). Einstufung kombiniert Win-Rate und Pick-Rate; Ergebnisse werden im Browser zwischengespeichert und stündlich neu geladen.</p>
+  <p class="meta" id="meta">lädt…</p>
+  <div id="tiers"></div>
+</main>
+
+<script>
+const ROLE_COLOR = { tank:'#5aa8f0', damage:'#ff5d5d', support:'#6bd07a' };
+const TIER_COLOR = { S:'var(--s)', A:'var(--a)', B:'var(--b)', C:'var(--c)', D:'var(--d)', F:'var(--f)' };
+const CACHE_TTL_STATS = 60 * 60 * 1000;      // 1h, matches API cache
+const CACHE_TTL_META  = 24 * 60 * 60 * 1000; // 1 day, heroes/maps metadata
+
+function cacheGet(key, ttl) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { t, v } = JSON.parse(raw);
+    if (Date.now() - t > ttl) return null;
+    return v;
+  } catch { return null; }
+}
+function cacheSet(key, v) {
+  try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), v })); } catch {}
+}
+async function cachedFetch(url, ttl) {
+  const key = 'ow:' + url;
+  const hit = cacheGet(key, ttl);
+  if (hit) return hit;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('API-Fehler ' + res.status + ' für ' + url);
+  const json = await res.json();
+  cacheSet(key, json);
+  return json;
+}
+
+const els = {
+  region: document.getElementById('f-region'),
+  platform: document.getElementById('f-platform'),
+  gamemode: document.getElementById('f-gamemode'),
+  rank: document.getElementById('f-rank'),
+  role: document.getElementById('f-role'),
+  map: document.getElementById('f-map'),
+  tiers: document.getElementById('tiers'),
+  meta: document.getElementById('meta'),
+  reset: document.getElementById('reset'),
+};
+
+let heroesByKey = null;
+
+async function loadMaps() {
+  const maps = await cachedFetch('https://overfast-api.tekrop.fr/maps', CACHE_TTL_META);
+  for (const m of maps) {
+    const opt = document.createElement('option');
+    opt.value = m.key;
+    opt.textContent = m.name;
+    els.map.appendChild(opt);
+  }
+}
+
+async function loadHeroes() {
+  const heroes = await cachedFetch('https://overfast-api.tekrop.fr/heroes?locale=de-de', CACHE_TTL_META);
+  heroesByKey = {};
+  for (const h of heroes) heroesByKey[h.key] = h;
+}
+
+function buildStatsUrl() {
+  const p = new URLSearchParams({
+    platform: els.platform.value,
+    gamemode: els.gamemode.value,
+    region: els.region.value,
+  });
+  if (els.rank.value) p.set('competitive_division', els.rank.value);
+  if (els.role.value) p.set('role', els.role.value);
+  if (els.map.value) p.set('map', els.map.value);
+  return 'https://overfast-api.tekrop.fr/heroes/stats?' + p.toString();
+}
+
+// Score: winrate, discounted for low-sample (low pickrate) heroes.
+function computeScore(winrate, pickrate) {
+  const confidence = Math.min(pickrate / 15, 1);
+  return winrate * (0.55 + 0.45 * confidence);
+}
+
+function bucketize(sorted) {
+  const n = sorted.length;
+  const cuts = [0.08, 0.30, 0.60, 0.85]; // cumulative fraction boundaries for S/A/B/C, rest = D
+  const labels = ['S', 'A', 'B', 'C', 'D'];
+  const tiers = { S: [], A: [], B: [], C: [], D: [] };
+  sorted.forEach((item, i) => {
+    const frac = (i + 1) / n;
+    let tier = 'D';
+    for (let k = 0; k < cuts.length; k++) {
+      if (frac <= cuts[k]) { tier = labels[k]; break; }
+    }
+    tiers[tier].push(item);
+  });
+  return tiers;
+}
+
+function render(stats) {
+  const merged = stats
+    .map(s => {
+      const meta = heroesByKey[s.hero];
+      if (!meta) return null;
+      return { ...s, meta, score: computeScore(s.winrate, s.pickrate) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+
+  if (!merged.length) {
+    els.tiers.innerHTML = '<div class="empty">Keine Daten für diese Filterkombination.</div>';
+    return;
+  }
+
+  const tiers = bucketize(merged);
+  els.tiers.innerHTML = '';
+  for (const label of ['S', 'A', 'B', 'C', 'D']) {
+    const items = tiers[label];
+    if (!items.length) continue;
+    const row = document.createElement('div');
+    row.className = 'tier';
+    row.innerHTML = `<div class="tier-label" style="background:${TIER_COLOR[label]}">${label}</div><div class="tier-cards"></div>`;
+    const cardsEl = row.querySelector('.tier-cards');
+    for (const it of items) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <img src="${it.meta.portrait}" alt="${it.meta.name}" loading="lazy">
+        <div>
+          <div class="name"><span class="role-dot" style="background:${ROLE_COLOR[it.meta.role] || '#888'}"></span>${it.meta.name}</div>
+          <div class="stats">${it.winrate.toFixed(1)}% WR · ${it.pickrate.toFixed(1)}% PR</div>
+        </div>`;
+      cardsEl.appendChild(card);
+    }
+    els.tiers.appendChild(row);
+  }
+}
+
+async function refresh() {
+  els.meta.textContent = 'lädt…';
+  try {
+    if (!heroesByKey) await loadHeroes();
+    const stats = await cachedFetch(buildStatsUrl(), CACHE_TTL_STATS);
+    render(stats);
+    els.meta.textContent = 'Stand: ' + new Date().toLocaleString('de-DE') + ' · Quelle: OverFast API (Blizzard-Live-Daten, stündlich zwischengespeichert)';
+  } catch (e) {
+    els.tiers.innerHTML = `<div class="status">Fehler beim Laden: ${e.message}</div>`;
+    els.meta.textContent = '';
+  }
+}
+
+[els.region, els.platform, els.gamemode, els.rank, els.role, els.map].forEach(el =>
+  el.addEventListener('change', refresh)
+);
+els.reset.addEventListener('click', () => {
+  els.region.value = 'europe';
+  els.platform.value = 'pc';
+  els.gamemode.value = 'competitive';
+  els.rank.value = '';
+  els.role.value = '';
+  els.map.value = '';
+  refresh();
+});
+
+(async () => {
+  await loadMaps();
+  await refresh();
+})();
+</script>
+</body>
+</html>
