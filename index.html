@@ -15,6 +15,7 @@
   header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;position:sticky;top:0;background:var(--bg);z-index:5}
   select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-weight:600;cursor:pointer}
   select:focus{outline:1px solid var(--accent)}
+  select:disabled{opacity:.4;cursor:not-allowed}
   button.reset{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-left:auto}
   button.reset:hover{color:var(--text)}
   .toggle{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;user-select:none}
@@ -31,6 +32,10 @@
   .card img{width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid var(--border)}
   .card .name{font-weight:700;font-size:14px}
   .card .stats{color:var(--muted);font-size:12px;margin-top:2px}
+  .card .trend{font-size:11px;margin-top:3px}
+  .trend-up{color:var(--c)}
+  .trend-down{color:var(--s)}
+  .trend-flat{color:var(--muted)}
   .role-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
   .empty{color:var(--muted);padding:20px;font-size:13px}
   .status{color:var(--muted);font-size:13px;padding:20px 0}
@@ -69,6 +74,13 @@
     <option value="support">Support</option>
   </select>
   <select id="f-map"><option value="">Alle Maps</option></select>
+  <select id="f-trend" title='Nur bei "Alle Ränge/Rollen/Maps" verfügbar'>
+    <option value="">Kein Trend</option>
+    <option value="1">Trend: 1 Tag</option>
+    <option value="7">Trend: 7 Tage</option>
+    <option value="30">Trend: 30 Tage</option>
+    <option value="90">Trend: 90 Tage</option>
+  </select>
   <label class="toggle"><input type="checkbox" id="f-purewr">Nur Win-Rate (keine Pick-Rate-Gewichtung)</label>
   <button class="reset" id="reset">↺ Zurücksetzen</button>
 </header>
@@ -76,7 +88,7 @@
 <main>
   <div class="accent-bar"></div>
   <h1>Overwatch Tier List</h1>
-  <p class="lede">Persönliches Tool, das Heldenstatistiken live von der <a class="src" href="https://overfast-api.tekrop.fr" target="_blank">OverFast API</a> lädt (inoffizielle, auf Blizzards eigenen Daten basierende API). Einstufung kombiniert Win-Rate und Pick-Rate; Ergebnisse werden im Browser zwischengespeichert und stündlich neu geladen.</p>
+  <p class="lede">Persönliches Tool, das Heldenstatistiken live von der <a class="src" href="https://overfast-api.tekrop.fr" target="_blank">OverFast API</a> lädt (inoffizielle, auf Blizzards eigenen Daten basierende API). Einstufung kombiniert Win-Rate und Pick-Rate; Ergebnisse werden im Browser zwischengespeichert und stündlich neu geladen. Blizzard liefert nur den kumulierten Wert seit Patch-Start (keine echten Zeitfenster) — der optionale Trend-Filter zeigt daher die <em>Veränderung</em> gegenüber einem älteren, täglich gespeicherten Snapshot, nicht eine exakte Win-Rate "nur der letzten N Tage". Nur bei ungefilterten Rängen/Rollen/Maps verfügbar.</p>
   <p class="meta" id="meta">lädt…</p>
   <div id="tiers"></div>
 </main>
@@ -86,6 +98,8 @@ const ROLE_COLOR = { tank:'#5aa8f0', damage:'#ff5d5d', support:'#6bd07a' };
 const TIER_COLOR = { S:'var(--s)', A:'var(--a)', B:'var(--b)', C:'var(--c)', D:'var(--d)', F:'var(--f)' };
 const CACHE_TTL_STATS = 60 * 60 * 1000;      // 1h, matches API cache
 const CACHE_TTL_META  = 24 * 60 * 60 * 1000; // 1 day, heroes/maps metadata
+const CACHE_TTL_SNAPSHOT = 6 * 60 * 60 * 1000; // snapshots only land once/day
+const SNAPSHOT_RAW_BASE = 'https://raw.githubusercontent.com/Skara89/overwatch-stats/master/snapshots';
 
 function cacheGet(key, ttl) {
   try {
@@ -117,6 +131,7 @@ const els = {
   rank: document.getElementById('f-rank'),
   role: document.getElementById('f-role'),
   map: document.getElementById('f-map'),
+  trend: document.getElementById('f-trend'),
   purewr: document.getElementById('f-purewr'),
   tiers: document.getElementById('tiers'),
   meta: document.getElementById('meta'),
@@ -125,6 +140,7 @@ const els = {
 
 let heroesByKey = null;
 let lastStats = null;
+let lastTrend = null;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -220,6 +236,52 @@ function computeScore(winrate, pickrate) {
   return w * winrate + (1 - w) * 50;
 }
 
+// Trend only makes sense against our own snapshot history, which we only
+// collect for the 12 unfiltered base combos (region x platform x gamemode).
+// Disable it whenever rank/role/map narrow the view, so we never imply a
+// trend number that doesn't actually match what's on screen.
+function updateTrendAvailability() {
+  const filtered = !!(els.rank.value || els.role.value || els.map.value);
+  els.trend.disabled = filtered;
+  if (filtered) els.trend.value = '';
+}
+
+function pickNearestDate(dates, targetTime) {
+  let best = null, bestDiff = Infinity;
+  for (const d of dates) {
+    const diff = Math.abs(new Date(d + 'T00:00:00Z').getTime() - targetTime);
+    if (diff < bestDiff) { bestDiff = diff; best = d; }
+  }
+  return best;
+}
+
+async function getTrendDeltas(windowDays) {
+  const index = await cachedFetch(`${SNAPSHOT_RAW_BASE}/index.json`, CACHE_TTL_SNAPSHOT);
+  if (!index.dates || !index.dates.length) return null;
+  const targetTime = Date.now() - windowDays * 86400000;
+  const nearestDate = pickNearestDate(index.dates, targetTime);
+  const day = await cachedFetch(`${SNAPSHOT_RAW_BASE}/${nearestDate}.json`, CACHE_TTL_SNAPSHOT);
+  const comboKey = `${els.region.value}|${els.platform.value}|${els.gamemode.value}`;
+  const combo = day.combos[comboKey];
+  if (!combo) return null;
+  const byHero = {};
+  for (const h of combo) byHero[h.hero] = h;
+  const actualDays = Math.round(Math.abs(Date.now() - new Date(nearestDate + 'T00:00:00Z').getTime()) / 86400000);
+  return { date: nearestDate, actualDays, byHero };
+}
+
+function trendChipHtml(heroKey, currentWinrate, currentPickrate, trend) {
+  if (!trend) return '';
+  const prev = trend.byHero[heroKey];
+  if (!prev) return '';
+  const dWR = currentWinrate - prev.winrate;
+  const dPR = currentPickrate - prev.pickrate;
+  const cls = dWR > 0.05 ? 'trend-up' : dWR < -0.05 ? 'trend-down' : 'trend-flat';
+  const arrow = dWR > 0.05 ? '▲' : dWR < -0.05 ? '▼' : '▬';
+  const sign = n => (n >= 0 ? '+' : '') + n.toFixed(1);
+  return `<div class="trend ${cls}">${arrow} ${sign(dWR)} Pp WR · ${sign(dPR)} Pp PR (${trend.actualDays}T)</div>`;
+}
+
 function bucketize(sorted) {
   const n = sorted.length;
   const cuts = [0.08, 0.30, 0.60, 0.85]; // cumulative fraction boundaries for S/A/B/C, rest = D
@@ -236,7 +298,7 @@ function bucketize(sorted) {
   return tiers;
 }
 
-function render(stats) {
+function render(stats, trend) {
   const merged = stats
     .map(s => {
       const meta = heroesByKey[s.hero];
@@ -268,6 +330,7 @@ function render(stats) {
         <div>
           <div class="name"><span class="role-dot" style="background:${ROLE_COLOR[it.meta.role] || '#888'}"></span>${it.meta.name}</div>
           <div class="stats">${it.winrate.toFixed(1)}% WR · ${it.pickrate.toFixed(1)}% PR</div>
+          ${trendChipHtml(it.hero, it.winrate, it.pickrate, trend)}
         </div>`;
       cardsEl.appendChild(card);
     }
@@ -277,18 +340,28 @@ function render(stats) {
 
 async function refresh() {
   els.meta.textContent = 'lädt…';
+  updateTrendAvailability();
   try {
     if (!heroesByKey) await loadHeroes();
     lastStats = await cachedFetch(buildStatsUrl(), CACHE_TTL_STATS);
-    render(lastStats);
-    els.meta.textContent = 'Stand: ' + new Date().toLocaleString('de-DE') + ' · Quelle: OverFast API (Blizzard-Live-Daten, stündlich zwischengespeichert)';
+    lastTrend = null;
+    let trendError = null;
+    if (els.trend.value) {
+      try { lastTrend = await getTrendDeltas(Number(els.trend.value)); }
+      catch (e) { trendError = e.message; }
+    }
+    render(lastStats, lastTrend);
+    let metaText = 'Stand: ' + new Date().toLocaleString('de-DE') + ' · Quelle: OverFast API (Blizzard-Live-Daten, stündlich zwischengespeichert)';
+    if (lastTrend) metaText += ` · Trend-Vergleich mit Snapshot vom ${lastTrend.date} (${lastTrend.actualDays} Tage alt)`;
+    else if (els.trend.value) metaText += ' · Trend-Daten nicht verfügbar' + (trendError ? ' (' + trendError + ')' : ' (noch keine Snapshots vorhanden?)');
+    els.meta.textContent = metaText;
   } catch (e) {
     els.tiers.innerHTML = `<div class="status">Fehler beim Laden: ${e.message}</div>`;
     els.meta.textContent = '';
   }
 }
 
-[els.region, els.platform, els.rank, els.role, els.map].forEach(el =>
+[els.region, els.platform, els.rank, els.role, els.map, els.trend].forEach(el =>
   el.addEventListener('change', refresh)
 );
 els.gamemode.addEventListener('change', async () => {
@@ -297,7 +370,7 @@ els.gamemode.addEventListener('change', async () => {
 });
 els.purewr.addEventListener('change', () => {
   try { localStorage.setItem('ow:purewr', els.purewr.checked ? '1' : '0'); } catch {}
-  if (lastStats) render(lastStats);
+  if (lastStats) render(lastStats, lastTrend);
 });
 els.reset.addEventListener('click', async () => {
   els.region.value = 'europe';
@@ -305,6 +378,7 @@ els.reset.addEventListener('click', async () => {
   els.gamemode.value = 'competitive';
   els.rank.value = '';
   els.role.value = '';
+  els.trend.value = '';
   els.purewr.checked = false;
   try { localStorage.setItem('ow:purewr', '0'); } catch {}
   await loadMaps(els.gamemode.value);

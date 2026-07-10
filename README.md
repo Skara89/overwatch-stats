@@ -44,3 +44,9 @@ Der Ordnername ist egal — es reicht die eine `.html`-Datei.
 - Es werden keine Zugangsdaten oder Accounts benötigt — die API ist öffentlich.
 - Filter-Einstellungen werden pro Browser 1 Stunde lokal zwischengespeichert (`localStorage`), für schnelleres Umschalten. Das ist rein lokal auf dem jeweiligen PC und muss nicht synchronisiert werden.
 - Änderungen am Tool selbst (Code) müssen erneut kopiert werden — es gibt keine automatische Aktualisierung zwischen den PCs.
+
+## Trend-Funktion (Zeitraum-Filter)
+
+Ein `Trend`-Dropdown zeigt die Veränderung gegenüber einem älteren Snapshot (1/7/30/90 Tage). Dafür zieht ein täglicher GitHub-Actions-Workflow (`.github/workflows/snapshot.yml`) automatisch Snapshots der Basis-Daten (alle Ränge/Rollen/Maps, 12 Region×Plattform×Modus-Kombinationen) und committet sie nach `snapshots/`. Der Browser liest diese Snapshots direkt von GitHub — **dafür muss das Repo öffentlich sein** (`Settings → Danger Zone → Change visibility → Make public`), sonst bekommt der Browser einen 404 und die Trend-Anzeige bleibt leer (alles andere im Tool funktioniert trotzdem normal).
+
+Der Trend-Filter ist nur bei „Alle Ränge/Alle Rollen/Alle Maps" aktiv, weil nur dafür Snapshots existieren. Er zeigt keine exakte Win-Rate „nur der letzten N Tage" (das lässt sich aus Blizzards kumulierten Werten nicht sauber herleiten), sondern die Differenz zum nächstgelegenen verfügbaren Snapshot.
