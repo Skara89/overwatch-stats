@@ -163,6 +163,7 @@
     </select>
   </div>
   <label class="toggle"><input type="checkbox" id="f-purewr">Nur Win-Rate</label>
+  <label class="toggle" title="Auch Maps ohne Statistikdaten anzeigen (z. B. brandneue oder Workshop-Maps)"><input type="checkbox" id="f-allmaps">Alle Maps anzeigen</label>
   <button class="reset" id="reset">Zurücksetzen</button>
 </div>
 
@@ -223,6 +224,7 @@ const els = {
   map: document.getElementById('f-map'),
   trend: document.getElementById('f-trend'),
   purewr: document.getElementById('f-purewr'),
+  allmaps: document.getElementById('f-allmaps'),
   tiers: document.getElementById('tiers'),
   meta: document.getElementById('meta'),
   reset: document.getElementById('reset'),
@@ -278,15 +280,13 @@ async function getValidMapKeys(gamemode) {
 }
 
 async function loadMaps(gamemode) {
-  const [maps, validKeys] = await Promise.all([
-    cachedFetch('https://overfast-api.tekrop.fr/maps', CACHE_TTL_META),
-    getValidMapKeys(gamemode),
-  ]);
-  const validSet = new Set(validKeys);
+  const showAll = els.allmaps.checked;
+  const maps = await cachedFetch('https://overfast-api.tekrop.fr/maps', CACHE_TTL_META);
+  const validSet = showAll ? null : new Set(await getValidMapKeys(gamemode));
   const previous = els.map.value;
   els.map.innerHTML = '<option value="">Alle</option>';
   for (const m of maps) {
-    if (!validSet.has(m.key)) continue;
+    if (validSet && !validSet.has(m.key)) continue;
     const opt = document.createElement('option');
     opt.value = m.key;
     opt.textContent = m.name;
@@ -496,6 +496,11 @@ els.purewr.addEventListener('change', () => {
   try { localStorage.setItem('ow:purewr', els.purewr.checked ? '1' : '0'); } catch {}
   if (lastStats) render(lastStats, lastTrend);
 });
+els.allmaps.addEventListener('change', async () => {
+  try { localStorage.setItem('ow:allmaps', els.allmaps.checked ? '1' : '0'); } catch {}
+  await loadMaps(els.gamemode.value);
+  refresh();
+});
 els.reset.addEventListener('click', async () => {
   els.region.value = 'europe';
   els.platform.value = 'pc';
@@ -504,7 +509,9 @@ els.reset.addEventListener('click', async () => {
   els.role.value = '';
   els.trend.value = '';
   els.purewr.checked = false;
+  els.allmaps.checked = false;
   try { localStorage.setItem('ow:purewr', '0'); } catch {}
+  try { localStorage.setItem('ow:allmaps', '0'); } catch {}
   await loadMaps(els.gamemode.value);
   els.map.value = '';
   refresh();
@@ -518,6 +525,7 @@ window.addEventListener('resize', () => {
 
 (async () => {
   try { els.purewr.checked = localStorage.getItem('ow:purewr') === '1'; } catch {}
+  try { els.allmaps.checked = localStorage.getItem('ow:allmaps') === '1'; } catch {}
   await loadMaps(els.gamemode.value);
   await refresh();
 })();
